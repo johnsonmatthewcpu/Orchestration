@@ -1,0 +1,49 @@
+{
+  "categories": ["Software", "Hardware", "Professional Services", "Marketing", "Facilities", "Travel"],
+  "intake_questions": [
+    {"id": "business_justification", "label": "Business justification", "type": "textarea", "required": true},
+    {"id": "needed_by", "label": "Needed by", "type": "date", "required": false},
+    {"id": "handles_customer_data", "label": "Will the vendor access customer or employee data?", "type": "select",
+     "options": ["no", "yes"], "required": true,
+     "show_if": {"field": "category", "op": "in", "value": ["Software", "Professional Services"]}},
+    {"id": "data_types", "label": "What kinds of data?", "type": "text", "required": true,
+     "show_if": {"field": "answers.handles_customer_data", "op": "==", "value": "yes"}},
+    {"id": "sso_supported", "label": "Does the tool support SSO?", "type": "select", "options": ["yes", "no", "unknown"],
+     "required": true, "show_if": {"field": "category", "op": "==", "value": "Software"}},
+    {"id": "contract_term_months", "label": "Contract term (months, 0 if one-off)", "type": "number", "required": true},
+    {"id": "auto_renew", "label": "Does the contract auto-renew?", "type": "select", "options": ["no", "yes"],
+     "required": false, "show_if": {"field": "answers.contract_term_months", "op": ">", "value": 0}},
+    {"id": "competitive_quotes", "label": "Number of competitive quotes obtained", "type": "number", "required": true,
+     "show_if": {"field": "amount", "op": ">=", "value": 25000}}
+  ],
+  "approval_rules": [
+    {"name": "Manager approval", "stage": 1, "approver": "manager",
+     "when": {"field": "amount", "op": ">", "value": 0}},
+    {"name": "Vendor onboarding review", "stage": 2, "approver": "role:procurement",
+     "when": {"field": "vendor.is_new", "op": "==", "value": true}},
+    {"name": "Security review", "stage": 2, "approver": "role:security",
+     "when": {"any": [
+       {"field": "answers.handles_customer_data", "op": "==", "value": "yes"},
+       {"field": "answers.sso_supported", "op": "==", "value": "no"}
+     ]}},
+    {"name": "IT review", "stage": 2, "approver": "role:it",
+     "when": {"field": "category", "op": "in", "value": ["Software", "Hardware"]}},
+    {"name": "Legal review", "stage": 2, "approver": "role:legal",
+     "when": {"any": [
+       {"field": "answers.contract_term_months", "op": ">=", "value": 12},
+       {"field": "amount", "op": ">=", "value": 50000}
+     ]}},
+    {"name": "Finance approval", "stage": 3, "approver": "role:finance",
+     "when": {"field": "amount", "op": ">=", "value": 5000}},
+    {"name": "Over-budget approval (CFO)", "stage": 4, "approver": "role:cfo",
+     "when": {"any": [
+       {"field": "budget.over", "op": "==", "value": true},
+       {"field": "amount", "op": ">=", "value": 100000}
+     ]}}
+  ],
+  "invoice_matching": {
+    "price_tolerance_pct": 2.0,
+    "amount_tolerance_pct": 1.0
+  },
+  "renewal_lookahead_days": 90
+}

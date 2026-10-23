@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ProcureFlow</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1d2330;--muted:#677084;--line:#e3e6ec;--accent:#3b5bdb;--ok:#2b8a3e;--warn:#e67700;--bad:#c92a2a}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+header{display:flex;align-items:center;gap:16px;padding:10px 20px;background:var(--card);border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font-size:17px;margin:0}nav{display:flex;gap:4px;flex-wrap:wrap}
+nav button{background:none;border:0;padding:6px 10px;border-radius:6px;cursor:pointer;color:var(--muted);font:inherit}
+nav button.active{background:#e7ecff;color:var(--accent);font-weight:600}
+.who{margin-left:auto;display:flex;gap:6px;align-items:center}
+main{max-width:1150px;margin:20px auto;padding:0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+h2{font-size:16px;margin:0 0 12px}h3{font-size:14px;margin:14px 0 8px}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase}tr.click{cursor:pointer}tr.click:hover{background:#f1f3f8}
+input,select,textarea{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;width:100%;background:#fff}
+textarea{min-height:60px}label{display:block;font-weight:600;margin:10px 0 4px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.btn{background:var(--accent);color:#fff;border:0;border-radius:6px;padding:7px 12px;cursor:pointer;font:inherit}
+.btn.secondary{background:#e9ecf3;color:var(--ink)}.btn.danger{background:var(--bad)}.btn.ok{background:var(--ok)}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;background:#e9ecf3}
+.s-approved,.s-ordered,.s-active,.s-matched,.s-paid,.s-closed,.s-received{background:#d3f9d8;color:#1b5e20}
+.s-pending,.s-pending_approval,.s-partially_received,.s-waiting,.s-open{background:#fff3bf;color:#7a4b00}
+.s-rejected,.s-blocked,.s-exception,.s-expired,.s-cancelled{background:#ffe3e3;color:#8a1c1c}
+.stat{font-size:24px;font-weight:700}.muted{color:var(--muted)}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#toast{position:fixed;bottom:20px;right:20px;padding:10px 14px;border-radius:8px;color:#fff;display:none;max-width:420px;z-index:9}
+.bar{height:8px;background:#e9ecf3;border-radius:4px;overflow:hidden}.bar>div{height:100%;background:var(--accent)}
+.bar.over>div{background:var(--bad)}.chain li{margin:2px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>ProcureFlow</h1>
+  <nav id="nav"></nav>
+  <div class="who"><span class="muted">Acting as</span><select id="user"></select></div>
+</header>
+<main id="view"></main>
+<div id="toast"></div>
+<script>
+const TABS = [["dashboard","Dashboard"],["new","New request"],["inbox","My approvals"],["requests","Requests"],
+  ["vendors","Vendors"],["budgets","Budgets"],["pos","POs & receiving"],["invoices","Invoices"],["contracts","Contracts"],["audit","Audit log"]];
+let META = null, TAB = "dashboard";
+const $ = s => document.querySelector(s);
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money = (v, c="USD") => v == null ? "—" : Number(v).toLocaleString(undefined,{style:"currency",currency:c||"USD"});
+const pill = s => `<span class="pill s-${esc(s)}">${esc(String(s).replace(/_/g," "))}</span>`;
+const uid = () => $("#user").value;
+const me = () => META.users.find(u => String(u.id) === uid());
+
+function toast(msg, bad){const t=$("#toast");t.textContent=msg;t.style.background=bad?"var(--bad)":"var(--ok)";t.style.display="block";clearTimeout(t._h);t._h=setTimeout(()=>t.style.display="none",4000)}
+async function api(path, body){
+  const r = await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json","X-User-Id":uid()},body:body?JSON.stringify(body):undefined});
+  const data = await r.json(); if(!r.ok) throw new Error(data.error||r.statusText); return data;
+}
+async function act(path, body, msg){try{await api(path, body||{}); toast(msg||"Done"); await refreshMeta(); render()}catch(e){toast(e.message,true)}}
+
+async function refreshMeta(){META = await api("/api/meta")}
+function nav(){ $("#nav").innerHTML = TABS.map(([k,l])=>`<button class="${k===TAB?"active":""}" onclick="go('${k}')">${l}</button>`).join("") }
+function go(t, arg){TAB=t; location.hash=t+(arg?"/"+arg:""); nav(); render(arg)}
+
+async function render(arg){
+  const v = $("#view");
+  try { v.innerHTML = await (VIEWS[TAB]||VIEWS.dashboard)(arg) } catch(e){ v.innerHTML = `<div class="card">${esc(e.message)}</div>` }
+  if (TAB==="new") initIntake();
+}
+
+const VIEWS = {
+async dashboard(){
+  const d = await api("/api/dashboard");
+  const st = d.requests_by_status;
+  return `<div class="grid">
+    ${[["Awaiting approval",st.pending_approval||0],["Ordered",st.ordered||0],["Open POs",d.open_pos],["Invoice exceptions",d.invoice_exceptions],
+       ["Avg cycle time",d.avg_cycle_time_hours==null?"—":d.avg_cycle_time_hours+" h"]]
+      .map(([l,n])=>`<div class="card"><div class="muted">${l}</div><div class="stat">${esc(n)}</div></div>`).join("")}</div>
+  <div class="card"><h2>Budgets (${new Date().getFullYear()})</h2>${budgetTable(d.budgets)}</div>
+  <div class="card"><h2>Upcoming renewals</h2>${d.upcoming_renewals.length?`<table><tr><th>Contract</th><th>Vendor</th><th>Ends</th><th>Value</th><th>Renewal request</th></tr>
+    ${d.upcoming_renewals.map(c=>`<tr><td>${esc(c.title)}</td><td>${esc(c.vendor)}</td><td>${esc(c.end_date)}</td><td>${money(c.value)}</td>
+    <td>${c.renewal_request_id?`<a href="#" onclick="go('requests',${c.renewal_request_id});return false">#${c.renewal_request_id}</a>`:"not started"}</td></tr>`).join("")}</table>`:`<p class="muted">None in the lookahead window.</p>`}
+    <div class="row" style="margin-top:10px"><button class="btn secondary" onclick="act('/api/jobs/run',{},'Scheduled jobs ran')">Run renewal / expiry jobs now</button></div></div>`;
+},
+async new(){
+  const opts = (a,f)=>a.map(x=>`<option value="${esc(f?f(x)[0]:x)}">${esc(f?f(x)[1]:x)}</option>`).join("");
+  return `<div class="card"><h2>New purchase request</h2>
+  <form id="intake" onsubmit="submitIntake(event)">
+   <div class="grid">
+    <div><label>Title</label><input name="title" required placeholder="e.g. Figma Enterprise seats"></div>
+    <div><label>Category</label><select name="category">${opts(META.categories)}</select></div>
+    <div><label>Department</label><select name="department_id">${opts(META.departments,d=>[d.id,d.name])}</select></div>
+    <div><label>Vendor</label><select name="vendor_id"><option value="">+ Propose a new vendor</option>
+      ${opts(META.vendors.filter(v=>v.status!=="blocked"),v=>[v.id,v.name+(v.status==="pending"?" (onboarding)":"")])}</select></div>
+    <div id="nvwrap"><label>New vendor name</label><input name="new_vendor_name"><label>New vendor email</label><input name="new_vendor_email" type="email"></div>
+   </div>
+   <h3>Line items</h3>
+   <table id="lines"><tr><th>Description</th><th style="width:110px">Qty</th><th style="width:140px">Unit price</th><th style="width:120px">Total</th><th></th></tr></table>
+   <button type="button" class="btn secondary" onclick="addLine()">+ Add line</button>
+   <div class="row" style="margin-top:6px"><b>Total: <span id="total">$0.00</span></b></div>
+   <label>Description</label><textarea name="description"></textarea>
+   <div id="questions"></div>
+   <div class="card" style="margin-top:14px;background:#fafbff"><h3 style="margin-top:0">Preview</h3><div id="preview" class="muted">Fill in the form…</div></div>
+   <button class="btn">Submit request</button>
+  </form></div>`;
+},
+async inbox(){
+  const items = await api("/api/inbox");
+  if (!items.length) return `<div class="card"><h2>My approvals</h2><p class="muted">Nothing waiting on ${esc(me().name)} (${esc(me().role)}). Try switching user.</p></div>`;
+  return `<div class="card"><h2>My approvals</h2><table><tr><th>#</th><th>Request</th><th>Amount</th><th>Your step</th><th>Flags</th></tr>
+   ${items.map(({request:r,step:s})=>`<tr class="click" onclick="go('requests',${r.id})"><td>${r.id}</td><td>${esc(r.title)}</td><td>${money(r.amount,r.currency)}</td><td>${esc(s.name)}</td><td>${flags(r)}</td></tr>`).join("")}</table></div>`;
+},
+async requests(id){
+  if (id) return requestDetail(id);
+  const rows = await api("/api/requests");
+  return `<div class="card"><h2>All requests</h2><table><tr><th>#</th><th>Title</th><th>Requester</th><th>Dept</th><th>Vendor</th><th>Amount</th><th>Status</th></tr>
+   ${rows.map(r=>`<tr class="click" onclick="go('requests',${r.id})"><td>${r.id}</td><td>${esc(r.title)} ${flags(r)}</td><td>${esc(r.requester)}</td><td>${esc(r.department)}</td><td>${esc(r.vendor)}</td><td>${money(r.amount,r.currency)}</td><td>${pill(r.status)}</td></tr>`).join("")}</table></div>`;
+},
+async vendors(){
+  const rows = await api("/api/vendors"); const canEdit = ["admin","procurement","security"].includes(me().role);
+  return `<div class="card"><h2>Vendors</h2><table><tr><th>Name</th><th>Email</th><th>Status</th><th>Risk</th><th>PO total</th>${canEdit?"<th>Actions</th>":""}</tr>
+   ${rows.map(v=>`<tr><td>${esc(v.name)}</td><td>${esc(v.email)}</td><td>${pill(v.status)}</td><td>${esc(v.risk_tier)}</td><td>${money(v.po_total)}</td>
+   ${canEdit?`<td class="row"><select onchange="act('/api/vendors/${v.id}',{risk_tier:this.value},'Risk updated')">${["unassessed","low","medium","high"].map(t=>`<option ${t===v.risk_tier?"selected":""}>${t}</option>`).join("")}</select>
+     ${v.status!=="blocked"?`<button class="btn danger" onclick="act('/api/vendors/${v.id}',{status:'blocked'},'Vendor blocked')">Block</button>`:`<button class="btn secondary" onclick="act('/api/vendors/${v.id}',{status:'active'},'Vendor unblocked')">Unblock</button>`}</td>`:""}</tr>`).join("")}</table>
+   ${["admin","procurement"].includes(me().role)?`<h3>Add pre-approved vendor</h3><form class="row" onsubmit="event.preventDefault();const f=new FormData(this);act('/api/vendors',Object.fromEntries(f),'Vendor added')">
+     <input name="name" placeholder="Name" required style="width:200px"><input name="email" placeholder="Email" style="width:200px"><input name="tax_id" placeholder="Tax ID" style="width:140px"><button class="btn">Add</button></form>`:""}</div>`;
+},
+async budgets(){
+  const rows = await api("/api/budgets");
+  return `<div class="card"><h2>Budgets</h2>${budgetTable(rows)}
+   ${["admin","finance"].includes(me().role)?`<h3>Set budget</h3><form class="row" onsubmit="event.preventDefault();const f=Object.fromEntries(new FormData(this));act('/api/budgets',f,'Budget saved')">
+    <select name="department_id" style="width:160px">${META.departments.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join("")}</select>
+    <select name="category" style="width:180px">${META.categories.map(c=>`<option>${esc(c)}</option>`).join("")}</select>
+    <input name="amount" type="number" min="0" step="0.01" placeholder="Amount" required style="width:140px"><button class="btn">Save</button></form>`:`<p class="muted">Switch to a finance user to edit budgets.</p>`}</div>`;
+},
+async pos(){
+  const rows = await api("/api/purchase-orders");
+  return `<div class="card"><h2>Purchase orders</h2>${rows.length?rows.map(p=>`<div class="card"><div class="row"><b>${esc(p.number)}</b> ${pill(p.status)} <span>${esc(p.vendor)} — ${esc(p.title)}</span><span class="muted" style="margin-left:auto">${money(p.amount,p.currency)}</span></div>
+    <table><tr><th>Line</th><th>Ordered</th><th>Received</th><th>Unit price</th><th>Receive</th></tr>
+    ${p.lines.map(l=>`<tr><td>${esc(l.description)}</td><td>${l.quantity}</td><td>${l.received_quantity}</td><td>${money(l.unit_price)}</td>
+     <td>${l.received_quantity<l.quantity&&!["closed","cancelled"].includes(p.status)?`<span class="row"><input type="number" min="0" step="any" value="${l.quantity-l.received_quantity}" id="rq${l.id}" style="width:90px"><button class="btn secondary" onclick="act('/api/purchase-orders/${p.id}/receive',{receipts:[{line_id:${l.id},quantity:$('#rq${l.id}').value}]},'Receipt recorded')">Receive</button></span>`:"✓"}</td></tr>`).join("")}</table></div>`).join(""):`<p class="muted">No POs yet — they are created automatically when a request is fully approved.</p>`}</div>`;
+},
+async invoices(){
+  const [rows, pos] = await Promise.all([api("/api/invoices"), api("/api/purchase-orders")]);
+  const fin = ["admin","finance","ap"].includes(me().role);
+  return `<div class="card"><h2>Invoices</h2><table><tr><th>Invoice</th><th>Vendor</th><th>PO</th><th>Amount</th><th>Status</th><th>Match</th>${fin?"<th>Actions</th>":""}</tr>
+   ${rows.map(i=>`<tr><td>${esc(i.number)}</td><td>${esc(i.vendor)}</td><td>${esc(i.po_number||"—")}</td><td>${money(i.amount)}</td><td>${pill(i.status)}</td>
+    <td>${i.match_result.matched?"3-way match ✓":(i.match_result.issues||[]).map(x=>`<div style="color:var(--bad)">• ${esc(x)}</div>`).join("")}</td>
+    ${fin?`<td class="row">${["matched","exception"].includes(i.status)?`<button class="btn ok" onclick="invAct(${i.id},'approve','${i.status}')">Approve</button><button class="btn danger" onclick="invAct(${i.id},'reject')">Reject</button>`:""}
+      ${i.status==="approved"?`<button class="btn" onclick="act('/api/invoices/${i.id}/pay',{},'Marked paid')">Mark paid</button>`:""}</td>`:""}</tr>`).join("")}</table>
+   <h3>Record an invoice</h3><form onsubmit="submitInvoice(event)"><div class="grid">
+    <div><label>PO</label><select name="po_number">${pos.map(p=>`<option>${esc(p.number)}</option>`).join("")}</select></div>
+    <div><label>Invoice number</label><input name="number" required></div></div>
+    <label>Lines (one per row: description | qty | unit price)</label><textarea name="lines" placeholder="Annual licence | 10 | 120"></textarea>
+    <p class="muted">Tip: copy the PO line descriptions exactly. Raise a price or quantity to see a match exception.</p>
+    <button class="btn">Submit invoice</button></form></div>`;
+},
+async contracts(){
+  const rows = await api("/api/contracts");
+  return `<div class="card"><h2>Contracts</h2><table><tr><th>Title</th><th>Vendor</th><th>Value</th><th>Start</th><th>End</th><th>Notice</th><th>Auto-renew</th><th>Status</th><th>Renewal</th></tr>
+   ${rows.map(c=>`<tr><td>${esc(c.title)}</td><td>${esc(c.vendor)}</td><td>${money(c.value)}</td><td>${esc(c.start_date)}</td><td>${esc(c.end_date)}</td><td>${c.notice_days}d</td><td>${c.auto_renew?"yes":"no"}</td><td>${pill(c.status)}</td>
+   <td>${c.renewal_request_id?`<a href="#" onclick="go('requests',${c.renewal_request_id});return false">#${c.renewal_request_id}</a>`:"—"}</td></tr>`).join("")}</table>
+   <div class="row" style="margin-top:10px"><button class="btn secondary" onclick="act('/api/jobs/run',{},'Scheduled jobs ran')">Run renewal / expiry jobs now</button></div></div>`;
+},
+async audit(){
+  const rows = await api("/api/audit");
+  return `<div class="card"><h2>Audit log</h2><table><tr><th>Time</th><th>Actor</th><th>Entity</th><th>Action</th><th>Detail</th></tr>
+   ${rows.map(a=>`<tr><td class="muted">${esc(a.ts)}</td><td>${esc(a.actor||"system")}</td><td>${esc(a.entity)} #${a.entity_id??""}</td><td>${esc(a.action)}</td><td class="muted"><code>${esc(JSON.stringify(a.detail))}</code></td></tr>`).join("")}</table></div>`;
+}};
+
+function flags(r){const f=r.flags||{};return [f.over_budget&&'<span class="pill s-exception">over budget</span>',f.no_budget&&'<span class="pill">no budget</span>',
+  f.new_vendor&&'<span class="pill s-pending">new vendor</span>',f.renewal_of_contract&&'<span class="pill">renewal</span>'].filter(Boolean).join(" ")}
+function budgetTable(rows){
+  if(!rows.length) return `<p class="muted">No budgets set.</p>`;
+  return `<table><tr><th>Department</th><th>Category</th><th>Budget</th><th>Committed</th><th>Pending</th><th>Paid</th><th>Remaining</th><th style="width:160px"></th></tr>
+  ${rows.map(b=>{const pct=b.budget?Math.min(100,100*b.committed/b.budget):0;return `<tr><td>${esc(b.department)}</td><td>${esc(b.category)}</td><td>${money(b.budget)}</td><td>${money(b.committed)}</td><td>${money(b.pending)}</td><td>${money(b.spent)}</td><td>${money(b.remaining)}</td>
+  <td><div class="bar ${b.remaining<0?"over":""}"><div style="width:${pct}%"></div></div></td></tr>`}).join("")}</table>`;
+}
+
+async function requestDetail(id){
+  const r = await api(`/api/requests/${id}`);
+  const canAct = r.can_act.length;
+  return `<div class="card"><div class="row"><h2 style="margin:0">#${r.id} ${esc(r.title)}</h2>${pill(r.status)} ${flags(r)}
+   <button class="btn secondary" style="margin-left:auto" onclick="go('requests')">← All requests</button></div>
+   <div class="grid" style="margin-top:12px">
+    <div><div class="muted">Amount</div><b>${money(r.amount,r.currency)}</b></div><div><div class="muted">Requester</div>${esc(r.requester.name)}</div>
+    <div><div class="muted">Department / category</div>${esc(r.department.name)} / ${esc(r.category)}</div><div><div class="muted">Vendor</div>${esc(r.vendor.name)} ${pill(r.vendor.status)}</div>
+    <div><div class="muted">Budget remaining (${r.budget.fiscal_year})</div>${money(r.budget.remaining)} of ${money(r.budget.budget)}</div></div>
+   ${r.description?`<p>${esc(r.description)}</p>`:""}
+   <h3>Line items</h3><table><tr><th>Description</th><th>Qty</th><th>Unit price</th></tr>${r.line_items.map(l=>`<tr><td>${esc(l.description)}</td><td>${l.quantity}</td><td>${money(l.unit_price,r.currency)}</td></tr>`).join("")}</table>
+   <h3>Intake answers</h3><table>${Object.entries(r.answers).map(([k,v])=>`<tr><td class="muted" style="width:40%">${esc((META.questions.find(q=>q.id===k)||{label:k}).label)}</td><td>${esc(v)}</td></tr>`).join("")||"<tr><td class='muted'>None</td></tr>"}</table>
+   <h3>Approval chain</h3><table><tr><th>Stage</th><th>Step</th><th>Approver</th><th>Status</th><th>Decision</th></tr>
+   ${r.steps.map(s=>`<tr><td>${s.stage}</td><td>${esc(s.name)}</td><td>${esc(s.approver_user_id?(META.users.find(u=>u.id===s.approver_user_id)||{}).name:"any "+s.approver_role)}</td><td>${pill(s.status)}</td>
+    <td class="muted">${s.decided_by?esc((META.users.find(u=>u.id===s.decided_by)||{}).name)+": ":""}${esc(s.comment||"")}</td></tr>`).join("")||"<tr><td colspan=5 class='muted'>No approvals required</td></tr>"}</table>
+   ${canAct?`<div class="card" style="background:#fafbff;margin-top:12px"><label>Comment</label><textarea id="cmt"></textarea><div class="row" style="margin-top:8px">
+     <button class="btn ok" onclick="act('/api/requests/${r.id}/approve',{comment:$('#cmt').value},'Approved')">Approve</button>
+     <button class="btn danger" onclick="act('/api/requests/${r.id}/reject',{comment:$('#cmt').value},'Rejected')">Reject</button></div></div>`:""}
+   ${r.status==="pending_approval"&&(r.requester_id===me().id||["admin","procurement"].includes(me().role))?`<button class="btn secondary" style="margin-top:10px" onclick="act('/api/requests/${r.id}/cancel',{},'Cancelled')">Cancel request</button>`:""}
+   ${r.purchase_order?`<h3>Purchase order</h3><p><b>${esc(r.purchase_order.number)}</b> ${pill(r.purchase_order.status)} — <a href="#" onclick="go('pos');return false">receive goods</a></p>`:""}
+   <h3>History</h3><table>${r.history.map(h=>`<tr><td class="muted" style="width:180px">${esc(h.ts)}</td><td>${esc(h.action)}</td><td class="muted">${esc(h.detail.step||h.detail.comment||"")}</td></tr>`).join("")}</table></div>`;
+}
+
+/* ---------- intake form ---------- */
+function addLine(d="",q=1,p=""){const t=$("#lines").insertRow();t.innerHTML=`<td><input class="ld" value="${esc(d)}"></td><td><input class="lq" type="number" min="0" step="any" value="${q}"></td><td><input class="lp" type="number" min="0" step="0.01" value="${p}"></td><td class="lt"></td><td><button type="button" class="btn secondary" onclick="this.closest('tr').remove();preview()">×</button></td>`}
+function lines(){return [...document.querySelectorAll("#lines tr")].slice(1).map(tr=>({description:tr.querySelector(".ld").value||$("#intake").elements.title.value,quantity:tr.querySelector(".lq").value,unit_price:tr.querySelector(".lp").value})).filter(l=>l.unit_price!=="")}
+function answers(){const a={};document.querySelectorAll("#questions [data-q]").forEach(el=>{if(el.value!=="")a[el.dataset.q]=el.value});return a}
+function draft(){const f=$("#intake");const ls=lines();return {title:f.elements.title.value,category:f.category.value,department_id:f.department_id.value,vendor_id:f.vendor_id.value||null,
+  new_vendor_name:f.new_vendor_name.value,amount:ls.reduce((s,l)=>s+(+l.quantity||0)*(+l.unit_price||0),0),answers:answers(),line_items:ls}}
+function initIntake(){addLine();const f=$("#intake");const dept=me().department_id;if(dept)f.department_id.value=dept;f.addEventListener("input",()=>preview());f.addEventListener("change",()=>preview());preview()}
+let _pv=0;
+async function preview(){
+  const f=$("#intake"); if(!f) return; $("#nvwrap").style.display=f.vendor_id.value?"none":"";
+  document.querySelectorAll("#lines tr").forEach((tr,i)=>{if(i)tr.querySelector(".lt").textContent=money((+tr.querySelector(".lq").value||0)*(+tr.querySelector(".lp").value||0))});
+  const d=draft(); $("#total").textContent=money(d.amount); const n=++_pv;
+  try{
+    const p=await api("/api/intake/preview",d); if(n!==_pv) return;
+    const cur=answers(); const box=$("#questions");
+    const want=p.questions.map(q=>q.id).join(","); if(box.dataset.ids!==want){box.dataset.ids=want;
+      box.innerHTML=p.questions.map(q=>`<label>${esc(q.label)}${q.required?" *":""}</label>${q.type==="select"?`<select data-q="${q.id}"><option value=""></option>${q.options.map(o=>`<option ${cur[q.id]===o?"selected":""}>${esc(o)}</option>`).join("")}</select>`
+        :q.type==="textarea"?`<textarea data-q="${q.id}">${esc(cur[q.id]||"")}</textarea>`:`<input data-q="${q.id}" type="${q.type==="number"?"number":q.type==="date"?"date":"text"}" value="${esc(cur[q.id]||"")}">`}`).join("")}
+    const b=p.budget;
+    $("#preview").innerHTML=`<div>Budget ${esc(b.fiscal_year)}: ${b.budget==null?"<b>no budget set</b>":`${money(b.remaining)} remaining of ${money(b.budget)}`} ${b.over?'<span class="pill s-exception">this request exceeds the remaining budget</span>':""}</div>
+      <div style="margin-top:6px">Approval chain:</div><ol class="chain">${p.approval_chain.map(s=>`<li>Stage ${s.stage}: ${esc(s.name)} <span class="muted">(${esc(s.approver)})</span></li>`).join("")||"<li>No approvals needed</li>"}</ol>`;
+  }catch(e){$("#preview").textContent=e.message}
+}
+async function submitIntake(ev){
+  ev.preventDefault(); const f=$("#intake"); const d=draft();
+  const body={title:d.title,category:d.category,department_id:+d.department_id,description:f.description.value,answers:d.answers,line_items:d.line_items};
+  if(d.vendor_id) body.vendor_id=+d.vendor_id; else body.new_vendor={name:f.new_vendor_name.value,email:f.new_vendor_email.value};
+  try{const r=await api("/api/requests",body);toast("Request submitted");await refreshMeta();go("requests",r.id)}catch(e){toast(e.message,true)}
+}
+async function submitInvoice(ev){
+  ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));
+  const ls=f.lines.split("\n").map(s=>s.split("|").map(x=>x.trim())).filter(p=>p.length===3&&p[0]).map(([description,quantity,unit_price])=>({description,quantity,unit_price}));
+  await act("/api/invoices",{po_number:f.po_number,number:f.number,lines:ls},"Invoice recorded");
+}
+function invAct(id,action,status){
+  let comment="";
+  if(action==="reject"||status==="exception"){comment=prompt(action==="reject"?"Reason for rejection":"This invoice has match exceptions. Reason for override:");if(comment===null)return}
+  act(`/api/invoices/${id}/${action}`,{comment},action==="reject"?"Invoice rejected":"Invoice approved");
+}
+
+(async function init(){
+  await refreshMeta();
+  const sel=$("#user"); sel.innerHTML=META.users.map(u=>`<option value="${u.id}">${esc(u.name)} — ${esc(u.role)}</option>`).join("");
+  try{const saved=localStorage.getItem("pf_user"); if(saved&&META.users.some(u=>String(u.id)===saved)) sel.value=saved}catch(e){}
+  sel.onchange=()=>{try{localStorage.setItem("pf_user",sel.value)}catch(e){} render(location.hash.split("/")[1])};
+  const [t,a]=location.hash.slice(1).split("/"); if(TABS.some(x=>x[0]===t)) TAB=t; nav(); render(a);
+})();
+</script>
+</body>
+</html>
