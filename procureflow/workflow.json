@@ -45,5 +45,20 @@
     "price_tolerance_pct": 2.0,
     "amount_tolerance_pct": 1.0
   },
-  "renewal_lookahead_days": 90
+  "renewal_lookahead_days": 90,
+  "approval_sla_days": 5,
+  "clause_rules": [
+    {"name": "Services, medium complexity", "clauses": ["2010B"],
+     "when": {"all": [{"field": "category", "op": "in", "value": ["Professional Services", "Software"]},
+                      {"field": "amount", "op": "<", "value": 100000}]}},
+    {"name": "Services, higher complexity", "clauses": ["2035"],
+     "when": {"all": [{"field": "category", "op": "in", "value": ["Professional Services", "Software"]},
+                      {"field": "amount", "op": ">=", "value": 100000}]}},
+    {"name": "Goods, medium complexity", "clauses": ["2010A"],
+     "when": {"all": [{"field": "category", "op": "in", "value": ["Hardware", "Facilities"]},
+                      {"field": "amount", "op": "<", "value": 100000}]}},
+    {"name": "Goods, higher complexity", "clauses": ["2030"],
+     "when": {"all": [{"field": "category", "op": "in", "value": ["Hardware", "Facilities"]},
+                      {"field": "amount", "op": ">=", "value": 100000}]}}
+  ]
 }

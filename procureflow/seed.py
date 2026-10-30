@@ -13,6 +13,7 @@ def seed(engine):
         u[key] = engine.create_user(name, f"{key}@example.com", role, d[dept], u.get(manager))
 
     user("admin", "Avery Admin", "admin", "Operations")
+    user("adm", "Dana ADM", "adm", "Operations")
     user("cfo", "Casey CFO", "cfo", "Finance")
     user("finance", "Frankie Finance", "finance", "Finance", "cfo")
     user("ap", "Alex Payables", "ap", "Finance", "finance")

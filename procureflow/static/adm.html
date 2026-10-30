@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ADM Procurement Dashboard</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--ink:#1b1f27;--muted:#5f6878;--line:#e2e5ea;--accent:#26558b;--bad:#b3261e;--ok:#25744a}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
+header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 20px;background:var(--card);border-bottom:1px solid var(--line)}
+header h1{font-size:17px;margin:0}header .sp{margin-left:auto}
+main{max-width:1150px;margin:18px auto;padding:0 16px;display:grid;gap:14px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.tile,.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.k{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}.v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.v.bad{color:var(--bad)}.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+h2{font-size:15px;margin:0 0 10px}table{width:100%;border-collapse:collapse}td,th{padding:6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-size:11px;text-transform:uppercase;color:var(--muted)}.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;min-width:80px}.bar>div{height:100%;background:var(--accent)}.bar.over>div{background:var(--bad)}
+.btn{background:var(--accent);color:#fff;border:0;border-radius:6px;padding:7px 12px;font:inherit;cursor:pointer;text-decoration:none}
+.btn.ghost{background:var(--line);color:var(--ink)}.pill{padding:1px 8px;border-radius:99px;font-size:12px;background:#fbe1de;color:var(--bad)}
+.muted{color:var(--muted)}select{font:inherit;padding:5px}
+@media print{header .sp,header button,header a,header select{display:none}body{background:#fff}}
+</style>
+</head>
+<body>
+<header><h1>Procurement dashboard for the ADM</h1><span class="muted" id="asof"></span>
+  <span class="sp"></span><select id="user" aria-label="Acting as" hidden></select>
+  <a class="btn ghost" id="csv" href="#">Download CSV</a><button class="btn ghost" onclick="print()">Print</button>
+  <button class="btn" id="teams">Post summary to Teams</button></header>
+<main id="view"><p class="muted">Loading…</p></main>
+<script>
+const $=s=>document.querySelector(s);
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money=v=>v==null?"—":"$"+Math.round(v).toLocaleString();
+let uid=null;try{uid=localStorage.getItem("pf_user")}catch(e){}
+const hdr=()=>uid?{"X-User-Id":uid}:{};
+async function api(path,opt={}){const r=await fetch(path,{...opt,headers:{"Content-Type":"application/json",...hdr()}});const d=await r.json();if(!r.ok)throw new Error(d.error);return d}
+
+async function load(){
+  $("#csv").href="/api/reports/adm.csv"+(uid?"?as="+encodeURIComponent(uid):"");
+  try{
+    const r=await api("/api/reports/adm"),k=r.kpis;
+    $("#asof").textContent="As of "+r.as_of;
+    const tiles=[["Committed",money(k.committed)],["Budget used",k.budget_utilization_pct==null?"—":k.budget_utilization_pct+"%"],["Paid",money(k.paid)],
+      ["Requests submitted",k.requests_submitted],["Pending approvals",k.pending_approvals],["Overdue (> "+r.approval_sla_days+" days)",k.overdue_approvals,k.overdue_approvals>0],
+      ["Avg. cycle time",k.avg_cycle_days==null?"—":k.avg_cycle_days+" days"],["Rejection rate",k.rejection_rate_pct==null?"—":k.rejection_rate_pct+"%"],
+      ["Invoice exceptions",k.invoice_exceptions,k.invoice_exceptions>0],["Renewals due (90 days)",k.renewals_due]];
+    const maxM=Math.max(1,...r.monthly.map(m=>m.committed));
+    $("#view").innerHTML=`<div class="tiles">${tiles.map(([a,b,bad])=>`<div class="tile"><div class="k">${esc(a)}</div><div class="v ${bad?"bad":""}">${esc(b)}</div></div>`).join("")}</div>
+    <div class="card"><h2>Budget by department, ${r.year}</h2><table><tr><th>Department</th><th class="n">Budget</th><th class="n">Committed</th><th class="n">Used</th><th></th></tr>
+     ${r.departments.map(d=>`<tr><td>${esc(d.department)}</td><td class="n">${money(d.budget)}</td><td class="n">${money(d.committed)}</td><td class="n">${d.utilization_pct==null?"—":d.utilization_pct+"%"}</td>
+     <td><div class="bar ${d.utilization_pct>100?"over":""}"><div style="width:${Math.min(100,d.utilization_pct||0)}%"></div></div></td></tr>`).join("")}</table></div>
+    <div class="two">
+     <div class="card"><h2>Committed by month (POs issued)</h2><table>${r.monthly.map(m=>`<tr><td>${esc(m.month)}</td><td style="width:55%"><div class="bar"><div style="width:${100*m.committed/maxM}%"></div></div></td><td class="n">${money(m.committed)}</td></tr>`).join("")||"<tr><td class='muted'>No POs yet</td></tr>"}</table></div>
+     <div class="card"><h2>Top vendors</h2><table><tr><th>Vendor</th><th class="n">POs</th><th class="n">Value</th></tr>${r.top_vendors.map(v=>`<tr><td>${esc(v.vendor)}</td><td class="n">${v.pos}</td><td class="n">${money(v.total)}</td></tr>`).join("")||"<tr><td class='muted'>None</td></tr>"}</table></div>
+    </div>
+    <div class="two">
+     <div class="card"><h2>Waiting for approval</h2><table><tr><th>Request</th><th>Waiting on</th><th class="n">Value</th><th class="n">Age</th></tr>
+      ${r.pending.map(p=>`<tr><td>#${p.id} ${esc(p.title)}</td><td>${esc(p.waiting_on)}</td><td class="n">${money(p.amount)}</td><td class="n">${p.age_days} d ${p.overdue?'<span class="pill">overdue</span>':""}</td></tr>`).join("")||"<tr><td class='muted'>Nothing pending</td></tr>"}</table></div>
+     <div class="card"><h2>Where approvals are waiting</h2><table>${r.bottlenecks.map(b=>`<tr><td>${esc(b.step)}</td><td class="n">${b.count}</td></tr>`).join("")||"<tr><td class='muted'>No bottlenecks</td></tr>"}</table>
+      <h2 style="margin-top:14px">Contracts up for renewal</h2><table>${r.renewals.map(c=>`<tr><td>${esc(c.title)}<div class="muted">${esc(c.vendor)}</div></td><td>${esc(c.end_date)}</td><td class="n">${money(c.value)}</td></tr>`).join("")||"<tr><td class='muted'>None in 90 days</td></tr>"}</table></div>
+    </div>`;
+  }catch(e){$("#view").innerHTML=`<div class="card">${esc(e.message)}. This dashboard is for ADM, CFO, finance and procurement roles.</div>`}
+}
+$("#teams").onclick=async()=>{try{await api("/api/reports/adm/teams",{method:"POST",body:"{}"});alert("Posted to Teams")}catch(e){alert(e.message)}};
+(async()=>{
+  const me=await fetch("/api/me",{headers:hdr()}).then(r=>r.ok?r.json():null).catch(()=>null);
+  if(!me||me.auth_mode!=="entra"){const m=await api("/api/meta");const sel=$("#user");sel.hidden=false;
+    sel.innerHTML=m.users.map(u=>`<option value="${u.id}">${esc(u.name)} · ${esc(u.role)}</option>`).join("");
+    if(!uid||!m.users.some(u=>String(u.id)===uid))uid=String((m.users.find(u=>u.role==="adm")||m.users[0]).id);
+    sel.value=uid;sel.onchange=()=>{uid=sel.value;try{localStorage.setItem("pf_user",uid)}catch(e){}load()}}
+  load();
+})();
+</script>
+</body>
+</html>

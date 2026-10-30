@@ -116,6 +116,15 @@ CREATE TABLE IF NOT EXISTS audit_log (
     action TEXT NOT NULL,
     detail TEXT NOT NULL DEFAULT '{}'
 );
+CREATE TABLE IF NOT EXISTS clauses (
+    id INTEGER PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    text TEXT NOT NULL DEFAULT '',
+    section TEXT,
+    version_date TEXT,
+    source_url TEXT
+);
 CREATE TABLE IF NOT EXISTS webhooks (
     id INTEGER PRIMARY KEY,
     url TEXT NOT NULL,

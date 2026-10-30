@@ -81,6 +81,7 @@ class Engine:
         self.config = config
         self._today = today or dt.date.today
         self._send_webhook = webhook_sender or _post_json_async
+        self.listeners = []  # in-process subscribers: fn(event, payload)
 
     # ------------------------------------------------------------------ utils
     def today(self):
@@ -98,6 +99,11 @@ class Engine:
         self.emit(f"{entity}.{action}", {"id": entity_id, "actor_id": actor_id, **detail})
 
     def emit(self, event, payload):
+        for listener in self.listeners:
+            try:
+                listener(event, payload)
+            except Exception:  # integrations must never break the workflow
+                pass
         for hook in self.db.all("SELECT * FROM webhooks"):
             if "*" in hook["events"] or event in hook["events"]:
                 self._send_webhook(hook["url"], {"event": event, "data": payload, "ts": self.now()})
@@ -308,6 +314,11 @@ class Engine:
             self.db.insert("approval_steps", step)
         self._advance(request_id, actor_id=None)
 
+    def approver_emails(self, step):
+        if step["approver_user_id"]:
+            return [self.db.get("users", step["approver_user_id"])["email"]]
+        return [u["email"] for u in self.db.all("SELECT email FROM users WHERE role=?", (step["approver_role"],))]
+
     def steps(self, request_id):
         return self.db.all("SELECT * FROM approval_steps WHERE request_id=? ORDER BY stage, id", (request_id,))
 
@@ -323,9 +334,12 @@ class Engine:
         for s in waiting:
             if s["stage"] == next_stage:
                 self.db.update("approval_steps", s["id"], {"status": "pending"})
+                req = self.db.get("requests", request_id)
                 self.emit("approval.requested", {"request_id": request_id, "step": s["name"],
+                                                 "title": req["title"], "amount": req["amount"],
                                                  "approver_user_id": s["approver_user_id"],
-                                                 "approver_role": s["approver_role"]})
+                                                 "approver_role": s["approver_role"],
+                                                 "approver_emails": self.approver_emails(s)})
 
     def can_act(self, user, step, request):
         if step["status"] != "pending" or user["id"] == request["requester_id"]:

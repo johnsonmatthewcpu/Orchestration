@@ -34,6 +34,9 @@ def meta(e, uid, body, q):
             "vendors": e.db.all("SELECT id, name, status, risk_tier FROM vendors ORDER BY name")}
 
 
+meta.public = True
+
+
 @route("POST", "/api/intake/preview")
 def intake_preview(e, uid, body, q):
     """Return visible questions + the approval chain a draft would get, without saving."""
@@ -237,11 +240,14 @@ def make_handler(engine):
                 length = int(self.headers.get("Content-Length") or 0)
                 body = json.loads(self.rfile.read(length) or b"{}") if length else {}
                 q = {k: v[0] for k, v in parse_qs(url.query).items()}
-                uid_header = self.headers.get("X-User-Id")
-                uid = int(uid_header) if uid_header and uid_header.isdigit() else None
-                if uid is None and fn is not meta:
+                uid = integrations.resolve_uid(engine, self.headers, q)
+                if uid is None and not getattr(fn, "public", False):
                     raise ProcurementError("Select a user (X-User-Id header)", 401)
-                self._send(200, fn(engine, uid, body, q, *match.groups()))
+                out = fn(engine, uid, body, q, *match.groups())
+                if isinstance(out, integrations.Raw):
+                    self._send(200, out.body, out.content_type)
+                else:
+                    self._send(200, out)
             except ProcurementError as exc:
                 self._send(exc.status, {"error": str(exc)})
             except (KeyError, ValueError, TypeError, json.JSONDecodeError) as exc:
@@ -272,3 +278,6 @@ def serve(engine, host="127.0.0.1", port=8000):
         pass
     finally:
         httpd.server_close()
+
+
+from . import integrations  # noqa: E402  (registers Entra, Teams, clause and report routes)

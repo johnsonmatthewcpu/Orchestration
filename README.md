@@ -46,3 +46,23 @@ The JSON API is under `/api/*`; see `procureflow/server.py`. Send the acting use
 ```bash
 python -m unittest discover -s tests -t .
 ```
+
+## Microsoft Entra ID, Teams, clauses and ADM reporting
+
+Everything here is configured with environment variables, so nothing changes in the code.
+
+| Variable | Purpose |
+|---|---|
+| `PROCUREFLOW_AUTH=entra` | Sign in with Microsoft Entra ID. Turn on App Service Authentication with the Microsoft provider. Users are created on first sign-in, and Entra app roles named `adm`, `cfo`, `finance`, `ap`, `procurement`, `legal`, `security`, `it` or `admin` set their role. An admin then sets each person's department and manager (`POST /api/users/{id}`). |
+| `TEAMS_WEBHOOK_URL` | Posts Teams cards when an approval is needed, a request is rejected, or a PO is issued (with a link to the contract package). Create the URL in Teams: channel → Workflows → "Post to a channel when a webhook request is received". |
+| `PROCUREFLOW_INTEGRATION_KEY` | Shared secret for approving in Teams (see below). |
+| `APP_BASE_URL` | The app's public URL, used for links in the Teams cards. |
+
+**Approving inside Teams (Power Automate):**
+1. Register the flow's HTTP trigger URL as a webhook for the `approval.requested` event (`POST /api/webhooks`).
+2. Add the action "Start and wait for an approval" and assign it to `data.approver_emails`.
+3. Add an HTTP action that POSTs `{"key", "request_id", "approver_email", "decision", "comment"}` to `/api/integrations/teams/decision`, using the responder's email and the outcome.
+
+**SACC clauses (CanadaBuys):** export or compile the clauses you use as a CSV with the columns `code,title,text,version_date,source_url`, then run `python -m procureflow import-clauses clauses.csv`. Rules in `workflow.json` (`clause_rules`) pick clauses for each request. The SACC codes there are examples, so confirm them against the SACC Manual. The contract package at `/api/requests/{id}/package` includes the request details, the approval record and the full clause text, and flags any clause missing from the library.
+
+**ADM dashboard:** open `/adm.html` (for the adm, cfo, finance and procurement roles). It shows budget use, committed and paid spend, overdue approvals, bottlenecks, top vendors and renewals, with CSV export and a button that posts a summary card to Teams. Budgets are by calendar year for now; government fiscal years (April–March) are not supported yet.
