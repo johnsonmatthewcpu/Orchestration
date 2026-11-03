@@ -30,6 +30,7 @@ textarea{min-height:60px}label{display:block;font-weight:600;margin:10px 0 4px}
 #toast{position:fixed;bottom:20px;right:20px;padding:10px 14px;border-radius:8px;color:#fff;display:none;max-width:420px;z-index:9}
 .bar{height:8px;background:#e9ecf3;border-radius:4px;overflow:hidden}.bar>div{height:100%;background:var(--accent)}
 .bar.over>div{background:var(--bad)}.chain li{margin:2px 0}
+.checks{padding-left:0;list-style:none;margin:0}.checks li{padding:3px 0}.ck-fail{color:#b3261e}
 </style>
 </head>
 <body>
@@ -84,7 +85,11 @@ async dashboard(){
 },
 async new(){
   const opts = (a,f)=>a.map(x=>`<option value="${esc(f?f(x)[0]:x)}">${esc(f?f(x)[1]:x)}</option>`).join("");
-  return `<div class="card"><h2>New purchase request</h2>
+  return `<div class="card"><h2>Describe what you need</h2>
+  <p class="muted">Write it in plain language. Say what you're buying, from whom, the cost, the term, and, for a sole source, why only this supplier can do it. This fills in the form below for you to check.</p>
+  <textarea id="nl" rows="4" placeholder="e.g. We need to sole source a 12-month licence renewal for our case management software from Acme Cloud for $18,500. It is proprietary and only Acme can support it."></textarea>
+  <button type="button" class="btn" onclick="fillFromText()">Fill in the form</button> <span id="nlnotes" class="muted"></span></div>
+  <div class="card"><h2>New purchase request</h2>
   <form id="intake" onsubmit="submitIntake(event)">
    <div class="grid">
     <div><label>Title</label><input name="title" required placeholder="e.g. Figma Enterprise seats"></div>
@@ -100,7 +105,8 @@ async new(){
    <div class="row" style="margin-top:6px"><b>Total: <span id="total">$0.00</span></b></div>
    <label>Description</label><textarea name="description"></textarea>
    <div id="questions"></div>
-   <div class="card" style="margin-top:14px;background:#fafbff"><h3 style="margin-top:0">Preview</h3><div id="preview" class="muted">Fill in the form…</div></div>
+   <div class="card" style="margin-top:14px;background:#fafbff"><h3 style="margin-top:0">Preview</h3><div id="preview" class="muted">Fill in the form…</div>
+    <h3>Compliance: Government Contracts Regulations and Directive on the Management of Procurement</h3><ul id="compliance" class="checks"></ul></div>
    <button class="btn">Submit request</button>
   </form></div>`;
 },
@@ -203,9 +209,19 @@ async function requestDetail(id){
 /* ---------- intake form ---------- */
 function addLine(d="",q=1,p=""){const t=$("#lines").insertRow();t.innerHTML=`<td><input class="ld" value="${esc(d)}"></td><td><input class="lq" type="number" min="0" step="any" value="${q}"></td><td><input class="lp" type="number" min="0" step="0.01" value="${p}"></td><td class="lt"></td><td><button type="button" class="btn secondary" onclick="this.closest('tr').remove();preview()">×</button></td>`}
 function lines(){return [...document.querySelectorAll("#lines tr")].slice(1).map(tr=>({description:tr.querySelector(".ld").value||$("#intake").elements.title.value,quantity:tr.querySelector(".lq").value,unit_price:tr.querySelector(".lp").value})).filter(l=>l.unit_price!=="")}
+let PREFILL={};
+async function fillFromText(){
+  try{const r=await api("/api/intake/parse",{text:$("#nl").value});const d=r.draft,f=$("#intake");
+    f.elements.title.value=d.title;f.category.value=d.category;f.description.value=d.description;
+    f.vendor_id.value=d.vendor_id||"";f.new_vendor_name.value=d.new_vendor_name||"";
+    $("#lines").querySelectorAll("tr:not(:first-child)").forEach(tr=>tr.remove());
+    (d.line_items.length?d.line_items:[{description:"",quantity:1,unit_price:""}]).forEach(l=>addLine(l.description,l.quantity,l.unit_price));
+    PREFILL=d.answers;$("#questions").dataset.ids="";$("#nlnotes").textContent=r.notes.join(" ");preview();
+  }catch(e){toast(e.message,true)}
+}
 function answers(){const a={};document.querySelectorAll("#questions [data-q]").forEach(el=>{if(el.value!=="")a[el.dataset.q]=el.value});return a}
 function draft(){const f=$("#intake");const ls=lines();return {title:f.elements.title.value,category:f.category.value,department_id:f.department_id.value,vendor_id:f.vendor_id.value||null,
-  new_vendor_name:f.new_vendor_name.value,amount:ls.reduce((s,l)=>s+(+l.quantity||0)*(+l.unit_price||0),0),answers:answers(),line_items:ls}}
+  new_vendor_name:f.new_vendor_name.value,amount:ls.reduce((s,l)=>s+(+l.quantity||0)*(+l.unit_price||0),0),answers:{...PREFILL,...answers()},line_items:ls}}
 function initIntake(){addLine();const f=$("#intake");const dept=me().department_id;if(dept)f.department_id.value=dept;f.addEventListener("input",()=>preview());f.addEventListener("change",()=>preview());preview()}
 let _pv=0;
 async function preview(){
@@ -214,20 +230,23 @@ async function preview(){
   const d=draft(); $("#total").textContent=money(d.amount); const n=++_pv;
   try{
     const p=await api("/api/intake/preview",d); if(n!==_pv) return;
-    const cur=answers(); const box=$("#questions");
+    const cur={...PREFILL,...answers()}; const box=$("#questions");
     const want=p.questions.map(q=>q.id).join(","); if(box.dataset.ids!==want){box.dataset.ids=want;
       box.innerHTML=p.questions.map(q=>`<label>${esc(q.label)}${q.required?" *":""}</label>${q.type==="select"?`<select data-q="${q.id}"><option value=""></option>${q.options.map(o=>`<option ${cur[q.id]===o?"selected":""}>${esc(o)}</option>`).join("")}</select>`
         :q.type==="textarea"?`<textarea data-q="${q.id}">${esc(cur[q.id]||"")}</textarea>`:`<input data-q="${q.id}" type="${q.type==="number"?"number":q.type==="date"?"date":"text"}" value="${esc(cur[q.id]||"")}">`}`).join("")}
     const b=p.budget;
     $("#preview").innerHTML=`<div>Budget ${esc(b.fiscal_year)}: ${b.budget==null?"<b>no budget set</b>":`${money(b.remaining)} remaining of ${money(b.budget)}`} ${b.over?'<span class="pill s-exception">this request exceeds the remaining budget</span>':""}</div>
       <div style="margin-top:6px">Approval chain:</div><ol class="chain">${p.approval_chain.map(s=>`<li>Stage ${s.stage}: ${esc(s.name)} <span class="muted">(${esc(s.approver)})</span></li>`).join("")||"<li>No approvals needed</li>"}</ol>`;
+    const c=await api("/api/intake/compliance",d); if(n!==_pv) return;
+    const icon={pass:"✅",fail:"❌",warn:"⚠️",info:"ℹ️"};
+    $("#compliance").innerHTML=c.checks.map(x=>`<li class="ck-${x.status}">${icon[x.status]} <b>${esc(x.rule)}</b>: ${esc(x.message)}</li>`).join("");
   }catch(e){$("#preview").textContent=e.message}
 }
 async function submitIntake(ev){
   ev.preventDefault(); const f=$("#intake"); const d=draft();
   const body={title:d.title,category:d.category,department_id:+d.department_id,description:f.description.value,answers:d.answers,line_items:d.line_items};
   if(d.vendor_id) body.vendor_id=+d.vendor_id; else body.new_vendor={name:f.new_vendor_name.value,email:f.new_vendor_email.value};
-  try{const r=await api("/api/requests",body);toast("Request submitted");await refreshMeta();go("requests",r.id)}catch(e){toast(e.message,true)}
+  try{const r=await api("/api/requests",body);PREFILL={};toast("Request submitted");await refreshMeta();go("requests",r.id)}catch(e){toast(e.message,true)}
 }
 async function submitInvoice(ev){
   ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));

@@ -1,45 +1,320 @@
 {
-  "categories": ["Software", "Hardware", "Professional Services", "Marketing", "Facilities", "Travel"],
+  "categories": [
+    "Software",
+    "Hardware",
+    "Professional Services",
+    "Marketing",
+    "Facilities",
+    "Travel"
+  ],
   "intake_questions": [
-    {"id": "business_justification", "label": "Business justification", "type": "textarea", "required": true},
-    {"id": "needed_by", "label": "Needed by", "type": "date", "required": false},
-    {"id": "handles_customer_data", "label": "Will the vendor access customer or employee data?", "type": "select",
-     "options": ["no", "yes"], "required": true,
-     "show_if": {"field": "category", "op": "in", "value": ["Software", "Professional Services"]}},
-    {"id": "data_types", "label": "What kinds of data?", "type": "text", "required": true,
-     "show_if": {"field": "answers.handles_customer_data", "op": "==", "value": "yes"}},
-    {"id": "sso_supported", "label": "Does the tool support SSO?", "type": "select", "options": ["yes", "no", "unknown"],
-     "required": true, "show_if": {"field": "category", "op": "==", "value": "Software"}},
-    {"id": "contract_term_months", "label": "Contract term (months, 0 if one-off)", "type": "number", "required": true},
-    {"id": "auto_renew", "label": "Does the contract auto-renew?", "type": "select", "options": ["no", "yes"],
-     "required": false, "show_if": {"field": "answers.contract_term_months", "op": ">", "value": 0}},
-    {"id": "competitive_quotes", "label": "Number of competitive quotes obtained", "type": "number", "required": true,
-     "show_if": {"field": "amount", "op": ">=", "value": 25000}}
+    {
+      "id": "business_justification",
+      "label": "Business justification",
+      "type": "textarea",
+      "required": true
+    },
+    {
+      "id": "needed_by",
+      "label": "Needed by",
+      "type": "date",
+      "required": false
+    },
+    {
+      "id": "handles_customer_data",
+      "label": "Will the vendor access customer or employee data?",
+      "type": "select",
+      "options": [
+        "no",
+        "yes"
+      ],
+      "required": true,
+      "show_if": {
+        "field": "category",
+        "op": "in",
+        "value": [
+          "Software",
+          "Professional Services"
+        ]
+      }
+    },
+    {
+      "id": "data_types",
+      "label": "What kinds of data?",
+      "type": "text",
+      "required": true,
+      "show_if": {
+        "field": "answers.handles_customer_data",
+        "op": "==",
+        "value": "yes"
+      }
+    },
+    {
+      "id": "sso_supported",
+      "label": "Does the tool support SSO?",
+      "type": "select",
+      "options": [
+        "yes",
+        "no",
+        "unknown"
+      ],
+      "required": true,
+      "show_if": {
+        "field": "category",
+        "op": "==",
+        "value": "Software"
+      }
+    },
+    {
+      "id": "contract_term_months",
+      "label": "Contract term (months, 0 if one-off)",
+      "type": "number",
+      "required": true
+    },
+    {
+      "id": "auto_renew",
+      "label": "Does the contract auto-renew?",
+      "type": "select",
+      "options": [
+        "no",
+        "yes"
+      ],
+      "required": false,
+      "show_if": {
+        "field": "answers.contract_term_months",
+        "op": ">",
+        "value": 0
+      }
+    },
+    {
+      "id": "competitive_quotes",
+      "label": "Number of competitive quotes obtained",
+      "type": "number",
+      "required": true,
+      "show_if": {
+        "field": "amount",
+        "op": ">=",
+        "value": 25000
+      }
+    },
+    {
+      "id": "procurement_method",
+      "label": "Procurement method",
+      "type": "select",
+      "options": [
+        "competitive",
+        "sole_source"
+      ],
+      "required": false
+    },
+    {
+      "id": "sole_source_ground",
+      "label": "Sole-source exception (Government Contracts Regulations s.6)",
+      "type": "select",
+      "options": [
+        "emergency",
+        "low_value",
+        "public_interest",
+        "single_supplier"
+      ],
+      "required": true,
+      "show_if": {
+        "field": "answers.procurement_method",
+        "op": "==",
+        "value": "sole_source"
+      }
+    },
+    {
+      "id": "sole_source_justification",
+      "label": "Sole-source justification (why the exception applies, alternatives considered)",
+      "type": "textarea",
+      "required": true,
+      "show_if": {
+        "field": "answers.procurement_method",
+        "op": "==",
+        "value": "sole_source"
+      }
+    },
+    {
+      "id": "acan_posted",
+      "label": "Advance Contract Award Notice (ACAN) posted on CanadaBuys?",
+      "type": "select",
+      "options": [
+        "yes",
+        "no",
+        "not_applicable"
+      ],
+      "required": false,
+      "show_if": {
+        "field": "answers.sole_source_ground",
+        "op": "==",
+        "value": "single_supplier"
+      }
+    },
+    {
+      "id": "indigenous_considered",
+      "label": "Indigenous business participation considered?",
+      "type": "select",
+      "options": [
+        "yes",
+        "no"
+      ],
+      "required": false
+    },
+    {
+      "id": "security_requirements",
+      "label": "Security requirements",
+      "type": "select",
+      "options": [
+        "none",
+        "reliability",
+        "secret",
+        "top_secret"
+      ],
+      "required": false
+    },
+    {
+      "id": "accessibility_considered",
+      "label": "Accessibility considered?",
+      "type": "select",
+      "options": [
+        "yes",
+        "not_applicable"
+      ],
+      "required": false
+    },
+    {
+      "id": "environmental_considered",
+      "label": "Environmental (green procurement) considerations addressed?",
+      "type": "select",
+      "options": [
+        "yes",
+        "not_applicable"
+      ],
+      "required": false
+    },
+    {
+      "id": "conflict_of_interest_declared",
+      "label": "I confirm no conflict of interest with this supplier",
+      "type": "select",
+      "options": [
+        "yes",
+        "no"
+      ],
+      "required": false
+    }
   ],
   "approval_rules": [
-    {"name": "Manager approval", "stage": 1, "approver": "manager",
-     "when": {"field": "amount", "op": ">", "value": 0}},
-    {"name": "Vendor onboarding review", "stage": 2, "approver": "role:procurement",
-     "when": {"field": "vendor.is_new", "op": "==", "value": true}},
-    {"name": "Security review", "stage": 2, "approver": "role:security",
-     "when": {"any": [
-       {"field": "answers.handles_customer_data", "op": "==", "value": "yes"},
-       {"field": "answers.sso_supported", "op": "==", "value": "no"}
-     ]}},
-    {"name": "IT review", "stage": 2, "approver": "role:it",
-     "when": {"field": "category", "op": "in", "value": ["Software", "Hardware"]}},
-    {"name": "Legal review", "stage": 2, "approver": "role:legal",
-     "when": {"any": [
-       {"field": "answers.contract_term_months", "op": ">=", "value": 12},
-       {"field": "amount", "op": ">=", "value": 50000}
-     ]}},
-    {"name": "Finance approval", "stage": 3, "approver": "role:finance",
-     "when": {"field": "amount", "op": ">=", "value": 5000}},
-    {"name": "Over-budget approval (CFO)", "stage": 4, "approver": "role:cfo",
-     "when": {"any": [
-       {"field": "budget.over", "op": "==", "value": true},
-       {"field": "amount", "op": ">=", "value": 100000}
-     ]}}
+    {
+      "name": "Manager approval",
+      "stage": 1,
+      "approver": "manager",
+      "when": {
+        "field": "amount",
+        "op": ">",
+        "value": 0
+      }
+    },
+    {
+      "name": "Vendor onboarding review",
+      "stage": 2,
+      "approver": "role:procurement",
+      "when": {
+        "field": "vendor.is_new",
+        "op": "==",
+        "value": true
+      }
+    },
+    {
+      "name": "Contracting authority: sole-source review",
+      "stage": 2,
+      "approver": "role:procurement",
+      "when": {
+        "field": "answers.procurement_method",
+        "op": "==",
+        "value": "sole_source"
+      }
+    },
+    {
+      "name": "Security review",
+      "stage": 2,
+      "approver": "role:security",
+      "when": {
+        "any": [
+          {
+            "field": "answers.handles_customer_data",
+            "op": "==",
+            "value": "yes"
+          },
+          {
+            "field": "answers.sso_supported",
+            "op": "==",
+            "value": "no"
+          }
+        ]
+      }
+    },
+    {
+      "name": "IT review",
+      "stage": 2,
+      "approver": "role:it",
+      "when": {
+        "field": "category",
+        "op": "in",
+        "value": [
+          "Software",
+          "Hardware"
+        ]
+      }
+    },
+    {
+      "name": "Legal review",
+      "stage": 2,
+      "approver": "role:legal",
+      "when": {
+        "any": [
+          {
+            "field": "answers.contract_term_months",
+            "op": ">=",
+            "value": 12
+          },
+          {
+            "field": "amount",
+            "op": ">=",
+            "value": 50000
+          }
+        ]
+      }
+    },
+    {
+      "name": "Finance approval",
+      "stage": 3,
+      "approver": "role:finance",
+      "when": {
+        "field": "amount",
+        "op": ">=",
+        "value": 5000
+      }
+    },
+    {
+      "name": "Over-budget approval (CFO)",
+      "stage": 4,
+      "approver": "role:cfo",
+      "when": {
+        "any": [
+          {
+            "field": "budget.over",
+            "op": "==",
+            "value": true
+          },
+          {
+            "field": "amount",
+            "op": ">=",
+            "value": 100000
+          }
+        ]
+      }
+    }
   ],
   "invoice_matching": {
     "price_tolerance_pct": 2.0,
@@ -48,17 +323,108 @@
   "renewal_lookahead_days": 90,
   "approval_sla_days": 5,
   "clause_rules": [
-    {"name": "Services, medium complexity", "clauses": ["2010B"],
-     "when": {"all": [{"field": "category", "op": "in", "value": ["Professional Services", "Software"]},
-                      {"field": "amount", "op": "<", "value": 100000}]}},
-    {"name": "Services, higher complexity", "clauses": ["2035"],
-     "when": {"all": [{"field": "category", "op": "in", "value": ["Professional Services", "Software"]},
-                      {"field": "amount", "op": ">=", "value": 100000}]}},
-    {"name": "Goods, medium complexity", "clauses": ["2010A"],
-     "when": {"all": [{"field": "category", "op": "in", "value": ["Hardware", "Facilities"]},
-                      {"field": "amount", "op": "<", "value": 100000}]}},
-    {"name": "Goods, higher complexity", "clauses": ["2030"],
-     "when": {"all": [{"field": "category", "op": "in", "value": ["Hardware", "Facilities"]},
-                      {"field": "amount", "op": ">=", "value": 100000}]}}
-  ]
+    {
+      "name": "Services, medium complexity",
+      "clauses": [
+        "2010B"
+      ],
+      "when": {
+        "all": [
+          {
+            "field": "category",
+            "op": "in",
+            "value": [
+              "Professional Services",
+              "Software"
+            ]
+          },
+          {
+            "field": "amount",
+            "op": "<",
+            "value": 100000
+          }
+        ]
+      }
+    },
+    {
+      "name": "Services, higher complexity",
+      "clauses": [
+        "2035"
+      ],
+      "when": {
+        "all": [
+          {
+            "field": "category",
+            "op": "in",
+            "value": [
+              "Professional Services",
+              "Software"
+            ]
+          },
+          {
+            "field": "amount",
+            "op": ">=",
+            "value": 100000
+          }
+        ]
+      }
+    },
+    {
+      "name": "Goods, medium complexity",
+      "clauses": [
+        "2010A"
+      ],
+      "when": {
+        "all": [
+          {
+            "field": "category",
+            "op": "in",
+            "value": [
+              "Hardware",
+              "Facilities"
+            ]
+          },
+          {
+            "field": "amount",
+            "op": "<",
+            "value": 100000
+          }
+        ]
+      }
+    },
+    {
+      "name": "Goods, higher complexity",
+      "clauses": [
+        "2030"
+      ],
+      "when": {
+        "all": [
+          {
+            "field": "category",
+            "op": "in",
+            "value": [
+              "Hardware",
+              "Facilities"
+            ]
+          },
+          {
+            "field": "amount",
+            "op": ">=",
+            "value": 100000
+          }
+        ]
+      }
+    }
+  ],
+  "compliance": {
+    "_note": "Verify every limit against the current Government Contracts Regulations, the Directive on the Management of Procurement and your departmental delegation before production use.",
+    "enforce": true,
+    "low_value_limit": 25000,
+    "delegated_sole_source_limit": 25000,
+    "acan_over": 25000,
+    "trade_agreement_threshold": 133800,
+    "proactive_disclosure_over": 10000,
+    "split_window_days": 365,
+    "min_justification_chars": 100
+  }
 }

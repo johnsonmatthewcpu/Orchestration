@@ -137,7 +137,9 @@ class TeamsNotifier:
 
 
 def install(engine, base_url):
-    """Attach integrations configured through environment variables."""
+    """Attach integrations configured through environment variables, plus GC compliance checks."""
+    from . import compliance
+    compliance.install(engine)
     url = os.environ.get("TEAMS_WEBHOOK_URL")
     if url:
         engine.listeners.append(TeamsNotifier(engine, url, os.environ.get("APP_BASE_URL") or base_url))

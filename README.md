@@ -68,3 +68,14 @@ Everything here is configured with environment variables, so nothing changes in 
 **SACC clauses (CanadaBuys):** alternatively, export or compile the clauses you use as a CSV with the columns `code,title,text,version_date,source_url`, then run `python -m procureflow import-clauses clauses.csv`. Rules in `workflow.json` (`clause_rules`) pick clauses for each request. The SACC codes there are examples, so confirm them against the SACC Manual. The contract package at `/api/requests/{id}/package` includes the request details, the approval record and the full clause text, and flags any clause missing from the library.
 
 **ADM dashboard:** open `/adm.html` (for the adm, cfo, finance and procurement roles). It shows budget use, committed and paid spend, overdue approvals, bottlenecks, top vendors and renewals, with CSV export and a button that posts a summary card to Teams. Budgets are by calendar year for now; government fiscal years (April–March) are not supported yet.
+
+## Plain-language intake and Government of Canada compliance
+On **New request**, describe the need in plain language and click **Fill in the form**. ProcureFlow drafts the request (title, category, supplier, cost, term, procurement method, and the sole-source exception if one applies). You then review and complete it.
+
+Each draft is checked live, and submission is blocked until every failure is fixed (`procureflow/compliance.py`):
+- **Government Contracts Regulations s.5–6:** bids must be solicited unless a sole source rests on one of the four s.6 exceptions: emergency, low value (≤ $25,000), public interest, or single supplier.
+- **Directive on the Management of Procurement:** a written justification on file; checks for contract splitting with the same supplier over the last 365 days; Indigenous participation, security, accessibility and environmental considerations; and a conflict-of-interest declaration.
+- **Warnings** (these don't block): ACAN posting for single-supplier claims, amounts above your delegated authority, trade-agreement thresholds, and proactive disclosure.
+- Every sole source gets a **contracting authority review** step in the approval chain.
+
+All limits are in `workflow.json` under `compliance`. Confirm them against the current regulations, your department's delegation instrument and the current trade-agreement thresholds before production use.

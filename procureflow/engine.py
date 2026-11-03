@@ -81,7 +81,8 @@ class Engine:
         self.config = config
         self._today = today or dt.date.today
         self._send_webhook = webhook_sender or _post_json_async
-        self.listeners = []  # in-process subscribers: fn(event, payload)
+        self.listeners = []
+        self.validators = []  # callables(engine, ctx, department) that raise ProcurementError  # in-process subscribers: fn(event, payload)
 
     # ------------------------------------------------------------------ utils
     def today(self):
@@ -273,6 +274,9 @@ class Engine:
         ctx = self.request_context(draft, vendor, department)
         answers = draft["answers"] if skip_validation else self._validate_answers(ctx)
         ctx["answers"] = answers
+        if not skip_validation:
+            for check in self.validators:
+                check(self, ctx, department)
         if new_vendor:
             vendor = self.db.get("vendors", self.create_vendor(
                 vendor["name"], new_vendor.get("email"), new_vendor.get("tax_id"), actor_id=requester_id))

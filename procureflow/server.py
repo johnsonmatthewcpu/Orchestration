@@ -37,17 +37,22 @@ def meta(e, uid, body, q):
 meta.public = True
 
 
-@route("POST", "/api/intake/preview")
-def intake_preview(e, uid, body, q):
-    """Return visible questions + the approval chain a draft would get, without saving."""
+def draft_context(e, uid, body):
+    """Build the evaluation context for an unsaved draft (same shape the engine uses)."""
     vendor = e.db.get("vendors", int(body["vendor_id"])) if body.get("vendor_id") else (
         {"name": body.get("new_vendor_name") or "", "status": "pending", "risk_tier": "unassessed"})
     user = e._user(uid)
     dept = e.db.get("departments", int(body.get("department_id") or user["department_id"] or 0))
     if not dept:
         raise ProcurementError("A department is required")
-    ctx = e.request_context({"amount": _num(body.get("amount")) or 0, "category": body.get("category"),
-                             "department_id": dept["id"], "answers": body.get("answers") or {}}, vendor, dept)
+    return e.request_context({"amount": _num(body.get("amount")) or 0, "category": body.get("category"),
+                              "department_id": dept["id"], "answers": body.get("answers") or {}}, vendor, dept), dept
+
+
+@route("POST", "/api/intake/preview")
+def intake_preview(e, uid, body, q):
+    """Return visible questions + the approval chain a draft would get, without saving."""
+    ctx, _ = draft_context(e, uid, body)
     chain = [{"name": r["name"], "stage": r["stage"], "approver": r["approver"]}
              for r in e.config["approval_rules"] if evaluate(r.get("when"), ctx)]
     return {"questions": e.visible_questions(ctx), "approval_chain": chain, "budget": ctx["budget"]}
@@ -281,3 +286,4 @@ def serve(engine, host="127.0.0.1", port=8000):
 
 
 from . import integrations  # noqa: E402  (registers Entra, Teams, clause and report routes)
+from . import compliance  # noqa: E402,F401  (registers NL intake + compliance routes)
