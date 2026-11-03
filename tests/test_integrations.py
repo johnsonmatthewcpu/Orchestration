@@ -60,6 +60,21 @@ class IntegrationTests(unittest.TestCase):
             I.adm_json(self.e, uid(self.e, "engineer"), {}, {})
         self.assertIn("kpi,committed,6000", I.adm_csv(self.e, uid(self.e, "adm"), {}, {}).body.decode())
 
+    def test_sacc_harvest(self):
+        from procureflow import sacc
+        root = "https://canadabuys.canada.ca/en/sacc-manual"
+        pages = {
+            root: '<main><h1>SACC Manual</h1><a href="/en/sacc-manual/2035">a</a>'
+                  '<a href="/en/sacc-manual/2035-old">b</a><a href="https://other.ca/x">c</a></main>',
+            root + "/2035": "<main><h1>2035 (2022-12-01) General Conditions - Higher Complexity - Services</h1>"
+                            "<p>01 Interpretation</p></main>",
+            root + "/2035-old": "<main><h1>2035 (2020-05-28) General Conditions - Higher Complexity - Services</h1></main>",
+        }
+        got = sacc.harvest(root, fetch=pages.__getitem__, delay=0, log=lambda *_: None)
+        self.assertEqual([(c["code"], c["version_date"]) for c in got], [("2035", "2022-12-01")])
+        self.assertIn("01 Interpretation", got[0]["text"])
+        self.assertEqual(I.import_clauses(self.e, got), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
